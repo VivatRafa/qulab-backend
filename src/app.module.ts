@@ -12,6 +12,7 @@ import { BalanceModule } from './balance/balance.module';
 import { AuthModule } from './auth/auth.module';
 import { PurseModule } from './purse/purse.module';
 import { OperationsModule } from './operations/operations.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
     imports: [
@@ -28,6 +29,7 @@ import { OperationsModule } from './operations/operations.module';
             entities: [__dirname + '/**/*.entity{.ts,.js}'],
             synchronize: true,
         }),
+        ScheduleModule.forRoot(),
         UsersModule,
         BalanceModule,
         AuthModule,
@@ -40,4 +42,6 @@ import { OperationsModule } from './operations/operations.module';
     controllers: [AppController],
     providers: [AppService],
 })
-export class AppModule {}
+export class AppModule {
+    constructor() {}
+}
