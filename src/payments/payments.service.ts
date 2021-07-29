@@ -1,5 +1,4 @@
 import { Withdraw } from './entities/withdraw.entity';
-import { PaymentRequest } from './entities/paymentRequest.entity';
 import { domain } from './../config/domain';
 import { BalanceType } from './../balance/enum/balanceType.enum';
 import { BalanceService } from './../balance/balance.service';
@@ -8,7 +7,7 @@ import { Balance } from './../balance/entities/balance.entity';
 import { Big } from 'big.js';
 import { Payment } from './entities/payment.entity';
 import { HttpService, Injectable, HttpException, HttpStatus } from '@nestjs/common';
-import { Repository } from 'typeorm';
+import { FindManyOptions, Repository } from 'typeorm';
 import { PaymentActionStatus } from './enums/paymentStatus.entity';
 import { BalanceActionType } from '../balance/enum/balanceActionType.enum';
 import { wallets } from '../config';
@@ -19,6 +18,11 @@ type UserPayout = {
     amount: number;
     address: string;
 };
+
+const errorsObj = {
+    'invalid amount (to low), receiver list index 0': 'Слишком маленькая сумма',
+    'not enough funds': 'Произошла какая-то ошибка, попробуйте позже',
+}
 
 @Injectable()
 export class PaymentsService {
@@ -32,8 +36,6 @@ export class PaymentsService {
         private readonly paymentRepository: Repository<Payment>,
         @InjectRepository(Withdraw)
         private readonly withdrawRepository: Repository<Withdraw>,
-        @InjectRepository(PaymentRequest)
-        private readonly paymentRequestRepository: Repository<PaymentRequest>,
         private readonly httpService: HttpService,
         private balanceService: BalanceService,
     ) {
@@ -64,7 +66,7 @@ export class PaymentsService {
 
         const body = {
             wallet_id: wallets.walletId,
-            callback_link: 'https://webhook.site/d40467c8-28f7-4a58-88e0-033824dc9f7e',
+            callback_link: 'http://45.147.177.198:3000/payments/replenishment-callback',
         };
 
         const { data, status } = await this.httpService.post(url, body).toPromise();
@@ -92,12 +94,13 @@ export class PaymentsService {
     }
 
     async confirmReplenishment(body) {
+
         const { event, code, invoice, amount } = body;
 
         if (event === 'confirmed') {
             const payment = await this.paymentRepository.findOne({ where: { code, invoice } });
 
-            if (payment) {
+            if (payment && payment.status !== PaymentActionStatus.done) {
                 try {
                     const bAmount = Big(amount);
                     const btc = bAmount.times(Big(0.00000001));
@@ -123,37 +126,42 @@ export class PaymentsService {
         const body = {
             receivers_list: [
                 {
-                    address: 'mpMsgAybHWxPhS88a19Uf83YuN5Uabu6Up',
+                    address,
                     amount: serviceBtcValue,
                 },
             ],
         };
 
-        const { data, status } = await this.httpService.post(url, body).toPromise();
+        try {
+            const { data, status } = await this.httpService.post(url, body).toPromise();
 
-        const isSuccess = status === 200;
+            const isSuccess = status === 200;
 
-        if (!isSuccess) {
+            if (!isSuccess) {
+                throw new HttpException('Что-то пошло не так, попробуйте позже', HttpStatus.BAD_REQUEST);
+            }
+
+            const { tx_list } = data;
+            const [info] = tx_list;
+
+            const { tx_hash } = info;
+
+            const newWithdraw: Omit<Withdraw, 'id'> = {
+                user_id: userId,
+                status: PaymentActionStatus.inProgress,
+                amount: serviceBtcValue,
+                date: new Date(),
+                address,
+                tx_hash,
+            };
+
+            await this.withdrawRepository.save(newWithdraw);
+
+            return { success: true };
+        } catch (e) {
+            console.log(e);
             throw new HttpException('Что-то пошло не так, попробуйте позже', HttpStatus.BAD_REQUEST);
         }
-
-        const { tx_list } = data;
-        const [info] = tx_list;
-
-        const { tx_hash } = info;
-
-        const newWithdraw: Omit<Withdraw, 'id'> = {
-            user_id: userId,
-            status: PaymentActionStatus.inProgress,
-            amount: serviceBtcValue,
-            date: new Date(),
-            address,
-            tx_hash,
-        };
-
-        await this.withdrawRepository.save(newWithdraw);
-
-        return { success: true };
     }
 
     async confirmWithdraw(body) {
@@ -168,7 +176,7 @@ export class PaymentsService {
                 where: { tx_hash, address },
             });
 
-            if (withdraw) {
+            if (withdraw  && withdraw.status !== PaymentActionStatus.done) {
                 await this.paymentRepository.update(withdraw.id, { amount: dollarRateBtc, status: PaymentActionStatus.done });
                 await this.balanceService.balanceAction(withdraw.user_id, BalanceType.balance, dollarRateBtc, BalanceActionType.decrease);
                 await this.balanceService.balanceAction(withdraw.user_id, BalanceType.withdrawn, dollarRateBtc, BalanceActionType.increase);
@@ -195,12 +203,18 @@ export class PaymentsService {
                 user_id: userId,
             },
         };
-        const withdrawList = await this.withdrawRepository.find(params);
+        const withdrawList = await this.getWithdrawsByParams(params);
 
         return withdrawList;
     }
 
-    async getPaymentsBy(params) {
+    async getWithdrawsByParams(param: FindManyOptions<Withdraw>) {
+        const withdrawList = await this.withdrawRepository.find(param);
+
+        return withdrawList;
+    }
+
+    async getPaymentsBy(params: FindManyOptions<Payment>) {
         const payments = await this.paymentRepository.find(params);
 
         return payments;

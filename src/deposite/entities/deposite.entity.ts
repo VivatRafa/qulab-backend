@@ -1,7 +1,6 @@
 import { PaymentActionStatus } from '../../payments/enums/paymentStatus.entity';
 import { User } from '../../users/entities/user.entity';
 import { Column, Entity, PrimaryGeneratedColumn, OneToOne } from 'typeorm';
-import { DepositeTariff } from './depositeTariff.entity';
 
 @Entity()
 export class Deposite {
@@ -21,8 +20,8 @@ export class Deposite {
     profit: number;
 
     @Column()
-    deposite_tariff_id: number;
+    tariff_id: number;
 
     @Column()
-    status_id: PaymentActionStatus;
+    status: PaymentActionStatus;
 }

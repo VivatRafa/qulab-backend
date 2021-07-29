@@ -22,6 +22,24 @@ export class UsersController {
         return this.usersService.getTopReferrals();
     }
 
+    @Post('update')
+    @UseGuards(JwtAuthGuard)
+    updateUserInfo(@Req() request: Request & { user: User }) {
+        const userId = request?.user?.id;
+        const { body } = request;
+
+        return this.usersService.updateUser(userId, body);
+    }
+
+    @Post('change-password')
+    @UseGuards(JwtAuthGuard)
+    changePassword(@Req() request: Request & { user: User }) {
+        const userId = request?.user?.id;
+        const data = request.body;
+
+        return this.usersService.changePassword(userId, data);
+    }
+
     @Get('referral-info')
     @UseGuards(JwtAuthGuard)
     getReferralAwards(@Req() request: Request & { user: User }) {

@@ -5,8 +5,8 @@ export class LoginUserDto {
     @IsEmail({}, { message: 'Некорректный email' })
     readonly email: string;
 
-    @IsString({ message: 'Должно быть строкой' })
-    @Length(8, 16, { message: 'Не меньше 4 и не больше 16' })
+    @IsString({ message: 'Пароль должен быть строкой' })
+    @Length(8, 16, { message: 'Пароль должен содержать не меньше 4 и не больше 16 символов' })
     readonly password: string;
 
     readonly referralId?: string;

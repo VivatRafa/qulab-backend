@@ -12,7 +12,7 @@ import { User } from '../users/entities/user.entity';
 export class AuthService {
     constructor(private userService: UsersService, private jwtService: JwtService, private balanceService: BalanceService) {}
 
-    async login(userDto: LoginUserDto) {
+    async login(userDto: LoginUserDto) {        
         const user = await this.validateUser(userDto);
         const accessToken = this.generateToken(user);
 
@@ -47,6 +47,8 @@ export class AuthService {
             id: user.id,
             login: user.login,
             statusId: user.status_id,
+            name: user.name,
+            country: user.country,
         };
 
         return this.jwtService.sign(payload);
@@ -61,8 +63,6 @@ export class AuthService {
             return user;
         }
 
-        throw new UnauthorizedException({
-            message: 'Некорректный емайл или пароль',
-        });
+        throw new HttpException({ message: ['Неправильный email или пароль'] }, HttpStatus.BAD_REQUEST);
     }
 }

@@ -15,14 +15,21 @@ export class User {
     @Column()
     password: string;
 
+    
     @Column()
     last_aсtivity: Date;
-
+    
     @Column()
     registration_date: Date;
-
+    
     @Column()
     status_id: number;
+    
+    @Column({ default: null })
+    name?: string;
+
+    @Column({ default: null })
+    country?: string;
 
     @Column({ default: null })
     referral_id?: number;

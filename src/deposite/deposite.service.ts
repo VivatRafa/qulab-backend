@@ -6,9 +6,11 @@ import { createQueryBuilder, Repository } from 'typeorm';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { CreateDepositeDto } from './dto/create-deposite.dto';
 import { UpdateDepositeDto } from './dto/update-deposite.dto';
-import { DepositeTariff } from './entities/depositeTariff.entity';
 import { Deposite } from './entities/deposite.entity';
 import { PaymentActionStatus } from '../payments/enums/paymentStatus.entity';
+import { BalanceService } from 'src/balance/balance.service';
+import { BalanceType } from 'src/balance/enum/balanceType.enum';
+import { BalanceActionType } from 'src/balance/enum/balanceActionType.enum';
 
 @Injectable()
 export class DepositeService {
@@ -17,6 +19,7 @@ export class DepositeService {
         private readonly depositeRepository: Repository<Deposite>,
         @InjectRepository(Balance)
         private readonly balanceRepository: Repository<Balance>,
+        private balanceService: BalanceService,
     ) {}
 
     async createDeposite(userId: number, data: CreateDepositeDto) {
@@ -35,8 +38,8 @@ export class DepositeService {
             date: new Date(),
             amount,
             profit: 0,
-            deposite_tariff_id: tariffId,
-            status_id: PaymentActionStatus.done,
+            tariff_id: tariffId,
+            status: PaymentActionStatus.done,
         };
         this.depositeRepository.save(deposite);
 
@@ -65,14 +68,15 @@ export class DepositeService {
     }
 
     async updateDepositeAmount() {
-        const { MAX_DEPOSITE_PERCENT, MIN_DEPOSITE_PERCENT } = depositeConfig;
-        const randomPercent = Big(this.getRandomPercent(MAX_DEPOSITE_PERCENT, MIN_DEPOSITE_PERCENT));
-
         const depositesList = await this.depositeRepository.find();
-        const updateDepositeList = depositesList.forEach((deposite) => {
+
+        depositesList.forEach((deposite) => {
+            
+            const percentFromConfig = depositeConfig.tariffs[deposite.tariff_id];
+            const percent = Big(percentFromConfig);
             const oldAmount = Big(deposite.amount);
             const profit = Big(deposite.profit);
-            const newAmount = oldAmount.times(randomPercent);
+            const newAmount = oldAmount.times(percent);
             // profit = oldProfit + (newAmount - oldAmount)
             const newProfit = profit.plus(newAmount.minus(oldAmount));
 
@@ -83,6 +87,8 @@ export class DepositeService {
             };
 
             this.depositeRepository.save(newDeposite);
+            this.balanceService.balanceAction(deposite.user_id, BalanceType.balance, newAmount.toNumber(), BalanceActionType.increase);
+            
         });
     }
 

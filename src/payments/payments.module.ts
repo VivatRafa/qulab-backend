@@ -1,4 +1,3 @@
-import { PaymentRequest } from './entities/paymentRequest.entity';
 import { Withdraw } from './entities/withdraw.entity';
 import { BalanceModule } from './../balance/balance.module';
 import { BalanceService } from './../balance/balance.service';
@@ -10,7 +9,7 @@ import { PaymentsController } from './payments.controller';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
-    imports: [HttpModule, AuthModule, TypeOrmModule.forFeature([Payment, PaymentRequest, Withdraw]), BalanceModule],
+    imports: [HttpModule, AuthModule, TypeOrmModule.forFeature([Payment, Withdraw]), BalanceModule],
     controllers: [PaymentsController],
     providers: [PaymentsService],
     exports: [PaymentsService],

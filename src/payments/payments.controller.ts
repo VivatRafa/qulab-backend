@@ -47,11 +47,13 @@ export class PaymentsController {
 
     @Post('replenishment-callback')
     replenishmentCallback(@Req() request: Request) {
+        
         return this.paymentsService.confirmReplenishment(request.body);
     }
 
     @Post('withdraw-callback')
     withdrawCallback(@Req() request: Request) {
+        
         return this.paymentsService.confirmWithdraw(request.body);
     }
 }

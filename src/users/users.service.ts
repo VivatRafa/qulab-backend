@@ -1,12 +1,15 @@
 import { BalanceService } from './../balance/balance.service';
 import { Balance } from './../balance/entities/balance.entity';
 import { User } from './entities/user.entity';
-import { forwardRef, Inject, Injectable } from '@nestjs/common';
+import { forwardRef, HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-
+import * as bcrypt from 'bcryptjs';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { ChangePassDto } from './dto/change-pass.dto';
 import { FindOneOptions, In, Repository } from 'typeorm';
 import { UserStatus } from './entities/userStatus.entity';
+import { PurseService } from 'src/purse/purse.service';
 
 @Injectable()
 export class UsersService {
@@ -19,16 +22,22 @@ export class UsersService {
         private readonly userStatusRepository: Repository<UserStatus>,
         @Inject(forwardRef(() => BalanceService))
         private balanceService: BalanceService,
+        private purseService: PurseService,
     ) {
         this.basicStatusId = 1;
     }
 
     async getUserInfo(userId) {
         const user = await this.userRepository.findOne({ where: { id: userId } });
+        const purse = await this.purseService.getPurseByParams({ where: { user_id: userId } })
 
-        delete user.password;
+        const userInfo = {
+            ...user,
+            address: purse?.address || '',
+        }
+        delete userInfo.password;
 
-        return user;
+        return userInfo;
     }
 
     async createUser(сreateUserDto: CreateUserDto) {
@@ -46,6 +55,12 @@ export class UsersService {
         } catch (e) {
             console.log(e);
         }
+    }
+
+    async updateUser(userId, updatedInfo: UpdateUserDto) {
+        await this.userRepository.update(userId, updatedInfo);
+
+        return { success: true };
     }
 
     async getAllUsers() {
@@ -152,6 +167,21 @@ export class UsersService {
         );
 
         return topReferrals;
+    }
+
+    async changePassword(userId: number, changePassInfo: ChangePassDto) {
+        const user = await this.userRepository.findOne({ where: { id: userId } });
+
+        const isPasswordEquals = await bcrypt.compare(changePassInfo.oldPassword, user.password);
+
+        if (isPasswordEquals) {
+            const hashPassword = await bcrypt.hash(changePassInfo.newPassword, 5);
+            await this.userRepository.update(user.id, { password: hashPassword });
+
+            return { success: true }
+        }
+
+        throw new HttpException('Неправильный пароль', HttpStatus.BAD_REQUEST);
     }
 
     async getStatuses() {}
