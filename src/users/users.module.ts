@@ -7,7 +7,7 @@ import { UsersService } from './users.service';
 import { AuthModule } from '../auth/auth.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserStatus } from './entities/userStatus.entity';
-import { PurseModule } from 'src/purse/purse.module';
+import { PurseModule } from '../purse/purse.module';
 
 @Module({
     controllers: [UsersController],

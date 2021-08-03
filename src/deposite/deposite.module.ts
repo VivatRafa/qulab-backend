@@ -5,7 +5,7 @@ import { Module } from '@nestjs/common';
 import { DepositeService } from './deposite.service';
 import { DepositeController } from './deposite.controller';
 import { AuthModule } from '../auth/auth.module';
-import { BalanceModule } from 'src/balance/balance.module';
+import { BalanceModule } from '../balance/balance.module';
 
 @Module({
     imports: [TypeOrmModule.forFeature([Deposite, Balance]), AuthModule, BalanceModule],

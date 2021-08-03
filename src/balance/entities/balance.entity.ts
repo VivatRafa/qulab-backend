@@ -9,18 +9,18 @@ export class Balance {
     @Column()
     user_id: number;
 
-    @Column()
+    @Column({ type: 'numeric', precision: 10, scale: 2 })
     balance: number;
 
-    @Column()
+    @Column({ type: 'numeric', precision: 10, scale: 2 })
     invested: number;
 
-    @Column()
+    @Column({ type: 'numeric', precision: 10, scale: 2 })
     withdrawn: number;
 
-    @Column()
+    @Column({ type: 'numeric', precision: 10, scale: 2 })
     referral: number;
 
-    @Column()
+    @Column({ type: 'numeric', precision: 10, scale: 2 })
     referral_award: number;
 }

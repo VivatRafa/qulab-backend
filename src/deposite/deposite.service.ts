@@ -8,9 +8,9 @@ import { CreateDepositeDto } from './dto/create-deposite.dto';
 import { UpdateDepositeDto } from './dto/update-deposite.dto';
 import { Deposite } from './entities/deposite.entity';
 import { PaymentActionStatus } from '../payments/enums/paymentStatus.entity';
-import { BalanceService } from 'src/balance/balance.service';
-import { BalanceType } from 'src/balance/enum/balanceType.enum';
-import { BalanceActionType } from 'src/balance/enum/balanceActionType.enum';
+import { BalanceService } from '../balance/balance.service';
+import { BalanceType } from '../balance/enum/balanceType.enum';
+import { BalanceActionType } from '../balance/enum/balanceActionType.enum';
 
 @Injectable()
 export class DepositeService {
@@ -22,10 +22,29 @@ export class DepositeService {
         private balanceService: BalanceService,
     ) {}
 
-    async createDeposite(userId: number, data: CreateDepositeDto) {
-        const { amount, tariffId } = data;
-        const { balance, invested, id: balanceId } = (await this.balanceRepository.findOne({ where: { user_id: userId } })) || {};
+    getTariffId(amount: number) {
+        const { tariffs } = depositeConfig;
+        const tariffId = Object.keys(tariffs).find(tariffId => {
+            const { amount: { from, until } } = tariffs[tariffId];
 
+            const gteFrom = Big(amount).gte(Big(from));
+            const lteUntil = Big(amount).lte(Big(until))
+            return gteFrom && lteUntil;
+        })
+
+        return Number(tariffId);
+    }
+
+    async createDeposite(userId: number, data: CreateDepositeDto) {
+        const { amount } = data;
+
+        if (typeof amount !== 'number') throw new HttpException('Сумма должна быть числом', HttpStatus.BAD_REQUEST);
+
+        if (Big(amount).lt(100)) throw new HttpException('Не меньше 100 QU', HttpStatus.BAD_REQUEST);
+
+
+        const { balance, invested, id: balanceId } = (await this.balanceRepository.findOne({ where: { user_id: userId } })) || {};
+        const tariffId = this.getTariffId(amount);
         const bAmount = Big(amount);
         const oldBalance = Big(balance);
         // balance >= amount
@@ -71,24 +90,16 @@ export class DepositeService {
         const depositesList = await this.depositeRepository.find();
 
         depositesList.forEach((deposite) => {
-            
-            const percentFromConfig = depositeConfig.tariffs[deposite.tariff_id];
+            const { percent: percentFromConfig } = depositeConfig.tariffs[deposite.tariff_id];
             const percent = Big(percentFromConfig);
-            const oldAmount = Big(deposite.amount);
+            const amount = Big(deposite.amount);
             const profit = Big(deposite.profit);
-            const newAmount = oldAmount.times(percent);
-            // profit = oldProfit + (newAmount - oldAmount)
-            const newProfit = profit.plus(newAmount.minus(oldAmount));
-
-            const newDeposite: Deposite = {
-                ...deposite,
-                amount: newAmount.toNumber(),
-                profit: newProfit.toNumber(),
-            };
-
-            this.depositeRepository.save(newDeposite);
-            this.balanceService.balanceAction(deposite.user_id, BalanceType.balance, newAmount.toNumber(), BalanceActionType.increase);
+            const newAmount = amount.times(percent);
             
+            const newProfit = profit.plus(newAmount.minus(amount)).toNumber();
+
+            this.depositeRepository.update(deposite.id, { profit: newProfit });
+            this.balanceService.balanceAction(deposite.user_id, BalanceType.balance, profit.toNumber(), BalanceActionType.increase);
         });
     }
 

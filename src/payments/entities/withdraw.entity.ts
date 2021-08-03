@@ -16,7 +16,7 @@ export class Withdraw {
     @Column()
     status: PaymentActionStatus;
 
-    @Column()
+    @Column({ type: 'numeric', precision: 10, scale: 2 })
     amount: number;
 
     @Column()

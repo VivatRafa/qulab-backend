@@ -9,8 +9,8 @@ export class ReferralAward {
     @Column()
     user_id: number;
 
-    @Column()
-    award: number;
+    @Column({ type: 'numeric', precision: 10, scale: 2 })
+    amount: number;
 
     @Column()
     date: Date;

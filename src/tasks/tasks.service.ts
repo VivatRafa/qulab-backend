@@ -7,10 +7,8 @@ export class TasksService {
     constructor(private depositeService: DepositeService) {}
 
     // каждую полночь
-    @Cron('* * * * *')
+    @Cron('0 0 * * *')
     handleCron() {
-        console.log('asd');
-        
-        // this.depositeService.updateDepositeAmount();
+        this.depositeService.updateDepositeAmount();
     }
 }

@@ -12,8 +12,6 @@ import { UpdateBalanceDto } from './dto/update-balance.dto';
 import { FindManyOptions, FindOneOptions, Repository } from 'typeorm';
 import { BalanceActionType } from './enum/balanceActionType.enum';
 
-const referralAwards = [0.01, 0.02, 0.03, 0.04, 0.05];
-
 @Injectable()
 export class BalanceService {
     constructor(
@@ -70,37 +68,37 @@ export class BalanceService {
             actionType === BalanceActionType.increase ? oldValue.plus(increaseValue).toNumber() : oldValue.minus(increaseValue).toNumber();
 
         this.balanceRepository.update(currentBalance.id, { [balanceType]: newValue });
-
-        // Добавляем реферальный оборот структуры рефералу
-        if (balanceType === BalanceType.balance && user.referral_id) {
-            this.addReferralToParent(user.referral_id, increaseValue.toNumber());
-        }
     }
 
     async addReferralToParent(userId: number, amount: number, referralLevel = 1) {
-        const { id, referral_id } = await this.userService.getUserByParams({ where: { id: userId } });
-        this.balanceAction(id, BalanceType.referral, amount, BalanceActionType.increase);
-        const referralAward = referralAwards[referralLevel - 1];
+        const { referral_id } = await this.userService.getUserByParams({ where: { id: userId } });
 
-        if (referralLevel && referralAward) {
-            const awardAmount = Big(amount).times(Big(referralAward)).toNumber();
-            this.balanceAction(id, BalanceType.balance, awardAmount, BalanceActionType.increase);
-            const newReferralAward: Omit<ReferralAward, 'id'> = {
-                user_id: id,
-                award: awardAmount,
-                date: new Date(),
-            };
-
-            this.balanceAction(id, BalanceType.referral_award, awardAmount, BalanceActionType.increase);
-            this.referralAwardRepository.save(newReferralAward);
+        if (referral_id) {
+            // Увеличиваем оборот рефералов
+            this.balanceAction(userId, BalanceType.referral, amount, BalanceActionType.increase);
+            const referralAward = referralAwards[referralLevel - 1];
+    
+            if (referralLevel && referralAward) {
+                const awardAmount = Big(amount).times(Big(referralAward)).toNumber();
+                this.balanceAction(userId, BalanceType.balance, awardAmount, BalanceActionType.increase);
+                const newReferralAward: Omit<ReferralAward, 'id'> = {
+                    user_id: userId,
+                    amount: awardAmount,
+                    date: new Date(),
+                };
+    
+                this.balanceAction(userId, BalanceType.referral_award, awardAmount, BalanceActionType.increase);
+                this.referralAwardRepository.save(newReferralAward);
+            }
+    
+            if (referral_id) this.addReferralToParent(referral_id, amount, referralLevel + 1);
         }
 
-        if (referral_id) this.addReferralToParent(referral_id, amount, referralLevel + 1);
     }
 
     async getReferralAwards(userId: number) {
         const referralAwards = await this.referralAwardRepository.find({ where: { user_id: userId } });
 
-        return referralAwards.map(({ id, award, date }) => ({ id, award, date }));
+        return referralAwards.map(({ id, amount, date }) => ({ id, amount, date }));
     }
 }

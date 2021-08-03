@@ -9,7 +9,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { ChangePassDto } from './dto/change-pass.dto';
 import { FindOneOptions, In, Repository } from 'typeorm';
 import { UserStatus } from './entities/userStatus.entity';
-import { PurseService } from 'src/purse/purse.service';
+import { PurseService } from '../purse/purse.service';
 
 @Injectable()
 export class UsersService {
