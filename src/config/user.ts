@@ -171,7 +171,7 @@ export const user = {
             invested: 500,
             referralAmount: 0,
             referralLine: 0,
-            award: 5,
+            award: 0.05,
         },
         {
             id: 2,
@@ -179,7 +179,7 @@ export const user = {
             invested: 1000,
             referralAmount: 0,
             referralLine: 0,
-            award: 6,
+            award: 0.06,
         },
         {
             id: 3,
@@ -187,7 +187,7 @@ export const user = {
             invested: 5000,
             referralAmount: 2500,
             referralLine: 1,
-            award: 7,
+            award: 0.07,
         },
         {
             id: 4,
@@ -195,7 +195,7 @@ export const user = {
             invested: 5000,
             referralAmount: 20000,
             referralLine: 2,
-            award: 8,
+            award: 0.08,
         },
         {
             id: 5,
@@ -203,7 +203,7 @@ export const user = {
             invested: 5000,
             referralAmount: 50000,
             referralLine: 3,
-            award: 9,
+            award: 0.09,
         },
         {
             id: 6,
@@ -211,7 +211,7 @@ export const user = {
             invested: 5000,
             referralAmount: 200000,
             referralLine: 4,
-            award: 10,
+            award: 0.01,
         },
         {
             id: 7,
@@ -219,7 +219,7 @@ export const user = {
             invested: 5000,
             referralAmount: 500000,
             referralLine: 5,
-            award: 11,
+            award: 0.011,
         },
         {
             id: 8,
@@ -228,7 +228,7 @@ export const user = {
             // 1 000 000
             referralAmount: 1000000,
             referralLine: 6,
-            award: 12,
+            award: 0.012,
         },
         {
             id: 9,
@@ -237,7 +237,7 @@ export const user = {
             // 3 000 000
             referralAmount: 3000000,
             referralLine: 7,
-            award: 13,
+            award: 0.013,
         },
         {
             id: 10,
@@ -246,7 +246,7 @@ export const user = {
             // 10 000 000
             referralAmount: 10000000,
             referralLine: 8,
-            award: 14,
+            award: 0.014,
         },
         {
             id: 11,
@@ -255,7 +255,7 @@ export const user = {
             // 30 000 000
             referralAmount: 30000000,
             referralLine: 9,
-            award: 15,
+            award: 0.015,
         },
     ],
 };

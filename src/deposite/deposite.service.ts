@@ -11,6 +11,9 @@ import { PaymentActionStatus } from '../payments/enums/paymentStatus.entity';
 import { BalanceService } from '../balance/balance.service';
 import { BalanceType } from '../balance/enum/balanceType.enum';
 import { BalanceActionType } from '../balance/enum/balanceActionType.enum';
+import * as dayjs from 'dayjs'
+
+const SENIOR_TARIFF_ID = 3;
 
 @Injectable()
 export class DepositeService {
@@ -32,23 +35,25 @@ export class DepositeService {
             return gteFrom && lteUntil;
         })
 
-        return Number(tariffId);
+        return Number(tariffId) || SENIOR_TARIFF_ID;
     }
 
-    async createDeposite(userId: number, data: CreateDepositeDto) {
-        const { amount } = data;
+    async createDeposite(userId: number, createDepositeDto: CreateDepositeDto) {
+        const { amount } = createDepositeDto;
 
         if (typeof amount !== 'number') throw new HttpException('Сумма должна быть числом', HttpStatus.BAD_REQUEST);
 
-        if (Big(amount).lt(100)) throw new HttpException('Не меньше 100 QU', HttpStatus.BAD_REQUEST);
+        const bigAmount = Big(amount);
+
+        if (bigAmount.lt(depositeConfig.min)) throw new HttpException('Не меньше 100 QU', HttpStatus.BAD_REQUEST);
 
 
-        const { balance, invested, id: balanceId } = (await this.balanceRepository.findOne({ where: { user_id: userId } })) || {};
+        const { balance, invested, id: balanceId } = (await this.balanceService.getBalanceByParam({ where: { user_id: userId } })) || {};
+
         const tariffId = this.getTariffId(amount);
-        const bAmount = Big(amount);
         const oldBalance = Big(balance);
         // balance >= amount
-        const isBalanceLessOrEqualThanAmount = oldBalance.gte(bAmount);
+        const isBalanceLessOrEqualThanAmount = oldBalance.gte(bigAmount);
 
         if (!isBalanceLessOrEqualThanAmount) throw new HttpException('На балансе недостаточно средств', HttpStatus.BAD_REQUEST);
 
@@ -58,20 +63,26 @@ export class DepositeService {
             amount,
             profit: 0,
             tariff_id: tariffId,
-            status: PaymentActionStatus.done,
+            status: PaymentActionStatus.inProgress,
         };
         this.depositeRepository.save(deposite);
 
         // balance - depositeAmount
-        const newBalance = Big(balance).minus(bAmount).toNumber();
+        const newBalance = Big(balance).minus(bigAmount).toNumber();
         // invested + depositeAmount
-        const newInvested = Big(invested).plus(bAmount).toNumber();
+        const newInvested = Big(invested).plus(bigAmount).toNumber();
 
         this.balanceRepository.update(balanceId, { balance: newBalance, invested: newInvested });
+
+        this.balanceService.addReferralToParent(userId, amount);
 
         return {
             success: true,
         };
+    }
+
+    async closeDeposite(userId: number, depositeId: number) {
+
     }
 
     async getDepositesBy(params) {
@@ -87,10 +98,17 @@ export class DepositeService {
     }
 
     async updateDepositeAmount() {
-        const depositesList = await this.depositeRepository.find();
+        const depositesList = await this.depositeRepository.find({ where: { status: PaymentActionStatus.inProgress } });
 
         depositesList.forEach((deposite) => {
-            const { percent: percentFromConfig } = depositeConfig.tariffs[deposite.tariff_id];
+            const { percent: percentFromConfig, days: depositeDaysLimit } = depositeConfig.tariffs[deposite.tariff_id];
+
+            const beginDate = dayjs(deposite.date);
+            const today = dayjs();
+            const daysFromBegin = beginDate.diff(today, 'day');
+
+            const isDepositeExpired = daysFromBegin >= depositeDaysLimit;
+            
             const percent = Big(percentFromConfig);
             const amount = Big(deposite.amount);
             const profit = Big(deposite.profit);
@@ -98,7 +116,13 @@ export class DepositeService {
             
             const newProfit = profit.plus(newAmount.minus(amount)).toNumber();
 
-            this.depositeRepository.update(deposite.id, { profit: newProfit });
+            const updatedDeposite: Partial<Deposite> = {
+                profit: newProfit,
+                ...(isDepositeExpired && { status: PaymentActionStatus.done })
+            }
+
+            this.depositeRepository.update(deposite.id, updatedDeposite);
+
             this.balanceService.balanceAction(deposite.user_id, BalanceType.balance, profit.toNumber(), BalanceActionType.increase);
         });
     }

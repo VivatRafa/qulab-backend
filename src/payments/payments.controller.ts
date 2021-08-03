@@ -45,7 +45,7 @@ export class PaymentsController {
         return this.paymentsService.withdraw(id, amount, address);
     }
 
-    @Post('replenishment-callback')
+    @Post('replenishment-callback')// сделать хэш
     replenishmentCallback(@Req() request: Request) {
         
         return this.paymentsService.confirmReplenishment(request.body);

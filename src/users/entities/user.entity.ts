@@ -1,4 +1,3 @@
-import { UserStatus } from './userStatus.entity';
 import { Column, Entity, OneToOne, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity()

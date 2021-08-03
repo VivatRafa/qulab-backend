@@ -8,8 +8,9 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ChangePassDto } from './dto/change-pass.dto';
 import { FindOneOptions, In, Repository } from 'typeorm';
-import { UserStatus } from './entities/userStatus.entity';
 import { PurseService } from '../purse/purse.service';
+import { user as userConfig } from 'src/config/user';
+import { statusType } from './types/userStatus';
 
 @Injectable()
 export class UsersService {
@@ -18,8 +19,6 @@ export class UsersService {
     constructor(
         @InjectRepository(User)
         private readonly userRepository: Repository<User>,
-        @InjectRepository(UserStatus)
-        private readonly userStatusRepository: Repository<UserStatus>,
         @Inject(forwardRef(() => BalanceService))
         private balanceService: BalanceService,
         private purseService: PurseService,
@@ -89,27 +88,54 @@ export class UsersService {
         return { referralCounts, activeReferralCounts };
     }
 
+    
+    // async getRecursiveStructure(ids, refLines) {
+    //     const idsExist = ids.length;
+
+    //     if (idsExist) {
+    //         const result = await ids.reduce(async (acc) => {
+    //             const downReferrals = await this.userRepository.find({ where: { referral_id: In(ids) } });
+    //             const downReferralsIds = downReferrals.map(({ id }) => id);
+    //             const lineStruct = await this.buildStructureItem(downReferralsIds);
+    //             const awaitAcc = (await acc) || [];
+    //             awaitAcc.push(lineStruct);
+
+    //             if (downReferralsIds.length) await this.getRecursiveStructure(downReferralsIds, awaitAcc);
+
+    //             return awaitAcc;
+    //         }, Promise.resolve(refLines));
+
+    //         return result;
+    //     }
+
+    //     return refLines;
+    // }
+
+    // переделать рекурсивно
     async getStructure(userId) {
-        const referralsFirstLine = await this.userRepository.find({ where: { referral_id: userId } });
-        const firstLineReferralsIds = referralsFirstLine.map((user) => user.id);
-
-        const referralsSecondLine = await this.userRepository.find({ where: { referral_id: In(firstLineReferralsIds) } });
-        const secondLineReferralsIds = referralsSecondLine.map((user) => user.id);
-
-        const referralsThirdLine = await this.userRepository.find({ where: { referral_id: In(secondLineReferralsIds) } });
-        const thirdLineReferralsIds = referralsThirdLine.map((user) => user.id);
-
-        const referralsFourthLine = await this.userRepository.find({ where: { referral_id: In(thirdLineReferralsIds) } });
-        const fourthLineReferralsIds = referralsFourthLine.map((user) => user.id);
+        const firstLineReferralsIds = await this.getDownReferralIds([userId]);
+        const secondLineReferralsIds = await this.getDownReferralIds(firstLineReferralsIds);
+        const thirdLineReferralsIds = await this.getDownReferralIds(secondLineReferralsIds);
+        const fourthLineReferralsIds = await this.getDownReferralIds(thirdLineReferralsIds);
+        const fifthLineReferralsIds = await this.getDownReferralIds(fourthLineReferralsIds);
 
         const result = {
             first: await this.buildStructureItem(firstLineReferralsIds),
             second: await this.buildStructureItem(secondLineReferralsIds),
             third: await this.buildStructureItem(thirdLineReferralsIds),
             fourth: await this.buildStructureItem(fourthLineReferralsIds),
+            fifth: await this.buildStructureItem(fifthLineReferralsIds),
         };
 
         return result;
+    }
+
+    async getDownReferralIds(userIds: number[]) {
+        const params = { where: { referral_id: In(userIds) } };
+        const downReferralUsers = await this.userRepository.find(params);
+        const downReferralUserIds = downReferralUsers.map(({ id }) => id);
+
+        return downReferralUserIds;
     }
 
     async buildStructureItem(userIds: number[]) {
@@ -129,27 +155,26 @@ export class UsersService {
             where: { user_id: userId },
         });
 
-        const userBalance = await this.balanceService.getBalanceByParam({
+        const { referral, invested: currentInvested } = await this.balanceService.getBalanceByParam({
             where: { user_id: userId },
         });
 
-        const userStatuses = await this.userStatusRepository.find();
+        const { statuses } = userConfig;
 
-        const currentStatus = userStatuses.find(({ id }) => id === currentStatusId);
-        // TODO Как только буду известны числа, можно будет знать как отсортировать неподходящие статусы
-        // Нужно выбрать только те статусы, суммы которых больше и выбртаь первую
-        const higherUserStatuses = userStatuses.filter(({ id }) => id !== currentStatusId);
+        const { id: newStatusId } = [...statuses].reverse().find(({ invested, referralAmount }) => {
+            const isInvestestedMoreThanStatus = currentInvested > invested;
+            const isReferralMoreThanStatus = referral > referralAmount;
 
-        const { id: newStatusId } = higherUserStatuses.find((status) => {
-            // const isAmountHighrer = status.amount > currentStatus.amount;
-            // const isRefAmountHighrer =
-            //     status.ref_amount > currentStatus.ref_amount;
-            return status;
+            return isInvestestedMoreThanStatus && isReferralMoreThanStatus;
         });
+        
+        const isNewStatus = currentStatusId !== newStatusId;
 
-        if (!newStatusId) return;
+        if (isNewStatus) this.userRepository.update(userId, { status_id: newStatusId });
+    }
 
-        this.userRepository.update(userId, { status_id: newStatusId });
+    getStatusInfo(statusId: number): statusType {
+        return userConfig.statuses.find(({ id }) => id === statusId);
     }
 
     async getTopReferrals() {

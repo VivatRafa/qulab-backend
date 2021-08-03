@@ -19,8 +19,13 @@ export class Balance {
     withdrawn: number;
 
     @Column({ type: 'numeric', precision: 10, scale: 2 })
+    holdBalance: number;
+
+    // оборот рефералов
+    @Column({ type: 'numeric', precision: 10, scale: 2 })
     referral: number;
 
+    // награда за действия рефералов
     @Column({ type: 'numeric', precision: 10, scale: 2 })
     referral_award: number;
 }

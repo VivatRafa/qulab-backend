@@ -4,4 +4,5 @@ export enum BalanceType {
     withdrawn = 'withdrawn',
     referral = 'referral',
     referral_award = 'referral_award',
+    holdBalance = 'holdBalance',
 }
