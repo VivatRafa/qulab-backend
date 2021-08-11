@@ -14,7 +14,6 @@ export class User {
     @Column()
     password: string;
 
-    
     @Column()
     last_aсtivity: Date;
     
@@ -23,6 +22,9 @@ export class User {
     
     @Column()
     status_id: number;
+
+    @Column()
+    award_id: number;
     
     @Column({ default: null })
     name?: string;

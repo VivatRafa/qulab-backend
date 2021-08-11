@@ -3,13 +3,13 @@ import { BalanceModule } from './../balance/balance.module';
 import { BalanceService } from './../balance/balance.service';
 import { Payment } from './entities/payment.entity';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { HttpModule, Module } from '@nestjs/common';
+import { forwardRef, HttpModule, Module } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { PaymentsController } from './payments.controller';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
-    imports: [HttpModule, AuthModule, TypeOrmModule.forFeature([Payment, Withdraw]), BalanceModule],
+    imports: [HttpModule, forwardRef(() => AuthModule), TypeOrmModule.forFeature([Payment, Withdraw]), forwardRef(() => BalanceModule)],
     controllers: [PaymentsController],
     providers: [PaymentsService],
     exports: [PaymentsService],

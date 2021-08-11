@@ -74,7 +74,7 @@ export class DepositeService {
 
         this.balanceRepository.update(balanceId, { balance: newBalance, invested: newInvested });
 
-        this.balanceService.addReferralToParent(userId, amount);
+        this.balanceService.addAwardToParentByUserStatus(userId, amount);
 
         return {
             success: true,

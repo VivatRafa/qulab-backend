@@ -1,7 +1,7 @@
 import { BalanceService } from './../balance/balance.service';
 import { Balance } from './../balance/entities/balance.entity';
 import { CreateUserDto } from './../users/dto/create-user.dto';
-import { HttpException, HttpStatus, Injectable, UnauthorizedException } from '@nestjs/common';
+import { forwardRef, HttpException, HttpStatus, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { LoginUserDto } from '../users/dto';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
@@ -10,7 +10,11 @@ import { User } from '../users/entities/user.entity';
 
 @Injectable()
 export class AuthService {
-    constructor(private userService: UsersService, private jwtService: JwtService, private balanceService: BalanceService) {}
+    constructor(
+        private userService: UsersService,
+        private jwtService: JwtService,
+        private balanceService: BalanceService
+    ) {}
 
     async login(userDto: LoginUserDto) {        
         const user = await this.validateUser(userDto);

@@ -45,9 +45,14 @@ export class PaymentsController {
         return this.paymentsService.withdraw(id, amount, address);
     }
 
+    @Get('getDollarRate')
+    @UseGuards(JwtAuthGuard)
+    getDollarRate() {
+        return this.paymentsService.getDollarRate();
+    }
+
     @Post('replenishment-callback')// сделать хэш
     replenishmentCallback(@Req() request: Request) {
-        
         return this.paymentsService.confirmReplenishment(request.body);
     }
 

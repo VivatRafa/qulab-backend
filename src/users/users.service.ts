@@ -9,12 +9,16 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { ChangePassDto } from './dto/change-pass.dto';
 import { FindOneOptions, In, Repository } from 'typeorm';
 import { PurseService } from '../purse/purse.service';
-import { user as userConfig } from 'src/config/user';
+import { user as userConfig } from '../config/user';
 import { statusType } from './types/userStatus';
+import { BalanceType } from '../balance/enum/balanceType.enum';
+import { BalanceActionType } from '../balance/enum/balanceActionType.enum';
+import Big from 'big.js';
 
 @Injectable()
 export class UsersService {
     basicStatusId: number;
+    basicAwardId: number;
 
     constructor(
         @InjectRepository(User)
@@ -24,6 +28,8 @@ export class UsersService {
         private purseService: PurseService,
     ) {
         this.basicStatusId = 1;
+        this.basicAwardId = 0;
+
     }
 
     async getUserInfo(userId) {
@@ -46,6 +52,7 @@ export class UsersService {
             last_aсtivity: new Date(),
             registration_date: new Date(),
             status_id: this.basicStatusId,
+            award_id: this.basicAwardId,
         };
 
         try {
@@ -150,9 +157,18 @@ export class UsersService {
         return list;
     }
 
+    async updateAllUsersBonus() {
+        const users = await this.userRepository.find();
+
+        users.forEach(({ id }) => {
+            this.updateUserStatus(id);
+            this.updateUserStatus(id);
+        })
+    }
+
     async updateUserStatus(userId: number) {
         const { status_id: currentStatusId } = await this.userRepository.findOne({
-            where: { user_id: userId },
+            where: { id: userId },
         });
 
         const { referral, invested: currentInvested } = await this.balanceService.getBalanceByParam({
@@ -160,17 +176,44 @@ export class UsersService {
         });
 
         const { statuses } = userConfig;
-
-        const { id: newStatusId } = [...statuses].reverse().find(({ invested, referralAmount }) => {
-            const isInvestestedMoreThanStatus = currentInvested > invested;
-            const isReferralMoreThanStatus = referral > referralAmount;
+        // статусы пользователя
+        const { id: matchedStatusId = currentStatusId } = [...statuses].reverse().find(({ invested, referralAmount }) => {
+            const isInvestestedMoreThanStatus = Big(currentInvested).gte(Big(invested));
+            const isReferralMoreThanStatus = Big(referral).gte(Big(referralAmount));
 
             return isInvestestedMoreThanStatus && isReferralMoreThanStatus;
-        });
-        
-        const isNewStatus = currentStatusId !== newStatusId;
+        }) || {};
 
-        if (isNewStatus) this.userRepository.update(userId, { status_id: newStatusId });
+        const isNewStatus = currentStatusId !== matchedStatusId;
+
+        if (isNewStatus) this.userRepository.update(userId, { status_id: matchedStatusId });
+    }
+
+    async updateUserAwards(userId: number) {
+        const { award_id: currentStatusId } = await this.userRepository.findOne({
+            where: { id: userId },
+        });
+
+        const { referral, invested: currentInvested } = await this.balanceService.getBalanceByParam({
+            where: { user_id: userId },
+        });
+
+        const { awards } = userConfig;
+        // статусы пользователя
+        const { id: matchedAwardId, award } = [...awards].reverse().find(({ invested, allReferralAmount }) => {
+            const isInvestestedMoreThanStatus = Big(currentInvested).gte(Big(invested));
+            const isReferralMoreThanStatus = Big(referral).gte(Big(allReferralAmount));
+
+            return isInvestestedMoreThanStatus && isReferralMoreThanStatus;
+        }) || {};
+
+        const isNewAwardStatus = currentStatusId !== matchedAwardId;
+
+        if (isNewAwardStatus) {
+            this.userRepository.update(userId, { award_id: matchedAwardId });
+            this.balanceService.balanceAction(userId, BalanceType.balance, award, BalanceActionType.increase);
+            this.balanceService.addAward(userId, award);
+        }
     }
 
     getStatusInfo(statusId: number): statusType {

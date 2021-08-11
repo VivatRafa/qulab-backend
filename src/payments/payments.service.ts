@@ -7,13 +7,13 @@ import { payment as paymentConfig } from './../config/payment';
 import { Balance } from './../balance/entities/balance.entity';
 import { Big } from 'big.js';
 import { Payment } from './entities/payment.entity';
-import { HttpService, Injectable, HttpException, HttpStatus } from '@nestjs/common';
+import { HttpService, Injectable, HttpException, HttpStatus, Inject, forwardRef } from '@nestjs/common';
 import { FindManyOptions, Repository } from 'typeorm';
 import { PaymentActionStatus } from './enums/paymentStatus.entity';
 import { BalanceActionType } from '../balance/enum/balanceActionType.enum';
 import { wallets } from '../config';
 import { PaymentActionType } from './enums/paymentType.enum';
-import { HoldActionType } from 'src/balance/enum/holdActionType.enum';
+import { HoldActionType } from '../balance/enum/holdActionType.enum';
 
 type UserPayout = {
     userId: number;
@@ -39,6 +39,7 @@ export class PaymentsService {
         @InjectRepository(Withdraw)
         private readonly withdrawRepository: Repository<Withdraw>,
         private readonly httpService: HttpService,
+        @Inject(forwardRef(() => BalanceService))
         private balanceService: BalanceService,
     ) {
         this.getDollarToBtcRateInterval = 60 * 60 * 1000; // час 60 * 60 * 1000;
@@ -187,12 +188,13 @@ export class PaymentsService {
         const { balance } = await this.balanceService.getBalanceByParam({ where: { user_id: userId } });
         
         const bigBalance = Big(balance);
-        const isLessThanBalance = bigAmount.lt(bigBalance);
+        const isLessThanBalance = bigBalance.lt(bigAmount);
 
         if (isLessThanBalance) errorMessage = 'Недостаточно средств на вашем счету';
 
         const btcAmount = bigAmount.times(Big(this.dollarToBtcRate));
-        const isAmountLessThanComission = btcAmount.lt(Big(paymentConfig.bitaps.comisson.withdraw));
+        const btcComission = Big(paymentConfig.bitaps.comisson.withdraw).times(Big(paymentConfig.oneSatoshi));
+        const isAmountLessThanComission = btcAmount.lt(btcComission);
 
         if (isAmountLessThanComission) errorMessage = 'Минимальная сумма выплаты 25 QU';
 
@@ -209,13 +211,16 @@ export class PaymentsService {
         
         const url = `${domain.BITAPS_API_TESTNET_BASE_URL}/wallet/send/payment/${wallets.testWalletId}`;
 
-        const serviceBtcValue = this.fromQuToSatoshi(amount);
+        const serviceBtcValue = Big(this.fromQuToSatoshi(amount));
+        const comission = Big(paymentConfig.bitaps.comisson.withdraw);
+
+        const amountWithComission = serviceBtcValue.minus(comission).toNumber();
 
         const body = {
             receivers_list: [
                 {
                     address,
-                    amount: serviceBtcValue,
+                    amount: amountWithComission,
                 },
             ],
         };
@@ -261,28 +266,24 @@ export class PaymentsService {
 
         if (event === 'wallet payment confirmed') {
             const usdAmount = this.fromSatoshiToQu(amount);
-            const usdComission = this.fromSatoshiToQu(paymentConfig.bitaps.comisson.withdraw);
-
-            const bigUsdAmount = Big(usdAmount);
-            const bigUsdComission = Big(usdComission);
-
-            const resultAmount = bigUsdAmount.minus(bigUsdComission).toNumber();
 
             const withdraw = await this.withdrawRepository.findOne({
                 where: { tx_hash, address },
             });
+            
+            const amountWithoutComission = withdraw.amount;
 
             const userId = withdraw.user_id;
 
             if (withdraw  && withdraw.status !== PaymentActionStatus.done) {
-                // обновляем статус и сумму запроса на вывод средств
-                await this.paymentRepository.update(withdraw.id, { amount: resultAmount, status: PaymentActionStatus.done });
                 // Уменьшаем баланс пользователя
-                await this.balanceService.balanceAction(userId, BalanceType.balance, resultAmount, BalanceActionType.decrease);
+                await this.balanceService.balanceAction(userId, BalanceType.balance, amountWithoutComission, BalanceActionType.decrease);
                 // Увеличиваем выведенное количество денег
-                await this.balanceService.balanceAction(userId, BalanceType.withdrawn, resultAmount, BalanceActionType.increase);
+                await this.balanceService.balanceAction(userId, BalanceType.withdrawn, amountWithoutComission, BalanceActionType.increase);
+                // обновляем статус и сумму запроса на вывод средств
+                await this.paymentRepository.update(withdraw.id, { amount: usdAmount, status: PaymentActionStatus.done });
                 // уберем с hold выведенное значение
-                await this.balanceService.holdAmountAction(userId, amount, HoldActionType.hold);
+                await this.balanceService.holdAmountAction(userId, amountWithoutComission, HoldActionType.unhold);
             }
         }
 
@@ -339,5 +340,9 @@ export class PaymentsService {
             message: 'message',
         };
         this.httpService.post(`https://api.bitaps.com/btc/v1/wallet/send/payment/${walletId}`, body);
+    }
+
+    getDollarRate() {
+        return { dollarRate: this.dollarToBtcRate };
     }
 }

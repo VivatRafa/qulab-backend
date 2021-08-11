@@ -6,12 +6,14 @@ import { BalanceType } from './enum/balanceType.enum';
 import { Big } from 'big.js';
 import { Balance } from './entities/balance.entity';
 import { InjectRepository } from '@nestjs/typeorm';
-import { forwardRef, Inject, Injectable } from '@nestjs/common';
+import { forwardRef, HttpService, Inject, Injectable } from '@nestjs/common';
 import { CreateBalanceDto } from './dto/create-balance.dto';
 import { UpdateBalanceDto } from './dto/update-balance.dto';
 import { FindManyOptions, FindOneOptions, Repository } from 'typeorm';
 import { BalanceActionType } from './enum/balanceActionType.enum';
 import { HoldActionType } from './enum/holdActionType.enum';
+import { domain, wallets } from '../config';
+import { PaymentsService } from '../payments/payments.service';
 
 const referralAwards = [0.1, 0.05];
 
@@ -26,6 +28,9 @@ export class BalanceService {
         private readonly referralAwardRepository: Repository<ReferralAward>,
         @Inject(forwardRef(() => UsersService))
         private userService: UsersService,
+        @Inject(forwardRef(() => PaymentsService))
+        private paymentsService: PaymentsService,
+        private readonly httpService: HttpService,
     ) {}
 
     async createBalance(userId) {
@@ -63,6 +68,18 @@ export class BalanceService {
     async getBalance(userId: number) {
         const balanceInfo = await this.balanceRepository.findOne({ where: { user_id: userId } });
 
+        // if (userId === 1) {
+        //     const url = `${domain.BITAPS_API_TESTNET_BASE_URL}/wallet/state/${wallets.testWalletId}`;
+        //     const { data, status } = await this.httpService.get(url).toPromise();
+        //     const isSuccess = status === 200;
+
+        //     if (isSuccess) {
+        //         const { balance_amount } = data;
+        //         const balance = this.paymentsService.fromSatoshiToQu(balance_amount);
+        //         balanceInfo.balance = balance;
+        //     }
+        // }
+
         delete balanceInfo.user_id;
 
         return balanceInfo;
@@ -91,9 +108,9 @@ export class BalanceService {
         this.balanceRepository.update(currentBalance.id, { [balanceType]: newValue.toNumber() });
     }
 
-    async addReferralToParent(userId: number, amount: number, referralLevel = 1) {
+    async addAwardToParentByUserStatus(userId: number, amount: number, referralLevel = 1) {
         const { referral_id: referralId } = await this.userService.getUserByParams({ where: { id: userId } });
-        
+
         // Есть ли верхний реферал
         if (referralId) {
             // смотрим статус
@@ -111,20 +128,61 @@ export class BalanceService {
                 // начисляем бонус за реферала
                 this.balanceAction(referralId, BalanceType.balance, awardAmount, BalanceActionType.increase);
 
-                const newReferralAward: Omit<ReferralAward, 'id'> = {
-                    user_id: referralId,
-                    amount: awardAmount,
-                    date: new Date(),
-                };
+
                 // Считаем сколько получил 
                 this.balanceAction(referralId, BalanceType.referral_award, awardAmount, BalanceActionType.increase);
-                this.referralAwardRepository.save(newReferralAward);
+
             }
-    
-            if (referralId) this.addReferralToParent(referralId, amount);
         }
 
     }
+
+    async addAward(userId: number, amount: number) {
+        const newReferralAward: Omit<ReferralAward, 'id'> = {
+            user_id: userId,
+            amount,
+            date: new Date(),
+        };
+
+        this.referralAwardRepository.save(newReferralAward);
+    }
+    // использовать для рефералов
+    // async addReferralToParent(userId: number, amount: number, referralLevel = 1) {
+    //     this.userService.updateUserStatus(userId);
+
+    //     const { referral_id: referralId } = await this.userService.getUserByParams({ where: { id: userId } });
+
+    //     // Есть ли верхний реферал
+    //     if (referralId) {
+    //         // смотрим статус
+    //         const { status_id } = await this.userService.getUserByParams({ where: { id: referralId } })
+    //         // Увеличиваем оборот рефералов 
+    //         this.balanceAction(referralId, BalanceType.referral, amount, BalanceActionType.increase);
+
+    //         // узнаем какой бонус
+    //         const { award: referralAward } = this.userService.getStatusInfo(status_id) || {};
+    
+    //         if (referralAward) {
+    //             const bigReferralAward = Big(referralAward);
+    //             const bigAmount = Big(amount);
+    //             const awardAmount = bigAmount.times(bigReferralAward).toNumber();
+    //             // начисляем бонус за реферала
+    //             this.balanceAction(referralId, BalanceType.balance, awardAmount, BalanceActionType.increase);
+
+    //             const newReferralAward: Omit<ReferralAward, 'id'> = {
+    //                 user_id: referralId,
+    //                 amount: awardAmount,
+    //                 date: new Date(),
+    //             };
+    //             // Считаем сколько получил 
+    //             this.balanceAction(referralId, BalanceType.referral_award, awardAmount, BalanceActionType.increase);
+    //             this.referralAwardRepository.save(newReferralAward);
+    //         }
+    
+    //         if (referralId) this.addReferralToParent(referralId, amount);
+    //     }
+
+    // }
 
     async getReferralAwards(userId: number) {
         const referralAwards = await this.referralAwardRepository.find({ where: { user_id: userId } });
