@@ -59,7 +59,7 @@ export class UsersService {
             const user: User = await this.userRepository.save(newUser);
             return user;
         } catch (e) {
-            console.log(e);
+            console.error(e);
         }
     }
 
@@ -157,14 +157,14 @@ export class UsersService {
         return list;
     }
 
-    async updateAllUsersBonus() {
-        const users = await this.userRepository.find();
+    // async updateAllUsersBonus() {
+    //     const users = await this.userRepository.find();
 
-        users.forEach(({ id }) => {
-            this.updateUserStatus(id);
-            this.updateUserStatus(id);
-        })
-    }
+    //     users.forEach(({ id }) => {
+    //         this.updateUserStatus(id);
+    //         this.updateUserStatus(id);
+    //     })
+    // }
 
     async updateUserStatus(userId: number) {
         const { status_id: currentStatusId } = await this.userRepository.findOne({

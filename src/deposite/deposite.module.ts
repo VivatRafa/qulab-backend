@@ -6,9 +6,10 @@ import { DepositeService } from './deposite.service';
 import { DepositeController } from './deposite.controller';
 import { AuthModule } from '../auth/auth.module';
 import { BalanceModule } from '../balance/balance.module';
+import { UsersModule } from 'src/users/users.module';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([Deposite, Balance]), AuthModule, BalanceModule],
+    imports: [TypeOrmModule.forFeature([Deposite, Balance]), AuthModule, BalanceModule, UsersModule],
     controllers: [DepositeController],
     providers: [DepositeService],
     exports: [DepositeService],

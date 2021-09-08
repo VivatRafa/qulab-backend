@@ -7,9 +7,10 @@ import { forwardRef, HttpModule, Module } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { PaymentsController } from './payments.controller';
 import { AuthModule } from '../auth/auth.module';
+import { Receiver } from './entities/receiver.entity';
 
 @Module({
-    imports: [HttpModule, forwardRef(() => AuthModule), TypeOrmModule.forFeature([Payment, Withdraw]), forwardRef(() => BalanceModule)],
+    imports: [HttpModule, forwardRef(() => AuthModule), TypeOrmModule.forFeature([Payment, Withdraw, Receiver]), forwardRef(() => BalanceModule)],
     controllers: [PaymentsController],
     providers: [PaymentsService],
     exports: [PaymentsService],

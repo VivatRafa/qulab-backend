@@ -12,6 +12,7 @@ import { BalanceService } from '../balance/balance.service';
 import { BalanceType } from '../balance/enum/balanceType.enum';
 import { BalanceActionType } from '../balance/enum/balanceActionType.enum';
 import * as dayjs from 'dayjs'
+import { UsersService } from 'src/users/users.service';
 
 const SENIOR_TARIFF_ID = 3;
 
@@ -23,7 +24,10 @@ export class DepositeService {
         @InjectRepository(Balance)
         private readonly balanceRepository: Repository<Balance>,
         private balanceService: BalanceService,
-    ) {}
+        private userService: UsersService,
+    ) {
+        this.updateDepositeAmount();
+    }
 
     getTariffId(amount: number) {
         const { tariffs } = depositeConfig;
@@ -76,6 +80,8 @@ export class DepositeService {
 
         this.balanceService.addAwardToParentByUserStatus(userId, amount);
 
+        this.userService.updateUserStatus(userId);
+        this.userService.updateUserAwards(userId);
         return {
             success: true,
         };

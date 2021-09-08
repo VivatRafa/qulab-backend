@@ -16,7 +16,7 @@ export class Deposite {
     @Column({ type: 'numeric', precision: 10, scale: 2 })
     amount: number;
 
-    @Column()
+    @Column({ type: 'numeric', precision: 10, scale: 2 })
     profit: number;
 
     @Column()

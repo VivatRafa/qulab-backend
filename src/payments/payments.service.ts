@@ -14,6 +14,7 @@ import { BalanceActionType } from '../balance/enum/balanceActionType.enum';
 import { wallets } from '../config';
 import { PaymentActionType } from './enums/paymentType.enum';
 import { HoldActionType } from '../balance/enum/holdActionType.enum';
+import { Receiver } from './entities/receiver.entity';
 
 type UserPayout = {
     userId: number;
@@ -38,23 +39,24 @@ export class PaymentsService {
         private readonly paymentRepository: Repository<Payment>,
         @InjectRepository(Withdraw)
         private readonly withdrawRepository: Repository<Withdraw>,
+        @InjectRepository(Receiver)
+        private readonly receiverRepository: Repository<Receiver>,
         private readonly httpService: HttpService,
         @Inject(forwardRef(() => BalanceService))
         private balanceService: BalanceService,
     ) {
         this.getDollarToBtcRateInterval = 60 * 60 * 1000; // час 60 * 60 * 1000;
         this.sendingInterval = 1000 * 60 * 5; // 5 мин
-        this.dollarToBtcRate = '0.000027';
+        this.dollarToBtcRate = '0.00002181';
 
         this.init();
     }
 
     init() {
-        this.startIntervalSending();
         this.startGetDollarRateInterval();
     }
 
-    async getDollarToBtcRate() {
+    getDollarToBtcRate = async () => {
         const { data: oneBtcToDollar, status } = await this.httpService.get('https://blockchain.info/tobtc?currency=USD&value=1').toPromise();
 
         if (status === 200) this.dollarToBtcRate = oneBtcToDollar;
@@ -93,7 +95,7 @@ export class PaymentsService {
 
         const body = {
             wallet_id: wallets.testWalletId,
-            callback_link: 'http://45.147.177.198:3001/payments/replenishment-callback',
+            callback_link: 'https://qulab.club/api/payments/replenishment-callback',
         };
 
         const { data, status } = await this.httpService.post(url, body).toPromise();
@@ -120,7 +122,7 @@ export class PaymentsService {
 
     async confirmReplenishment(body) {
         const { event, code, invoice, amount } = body;
-
+        
         if (event === 'confirmed') {
             const payment = await this.paymentRepository.findOne({ where: { code, invoice } });
 
@@ -138,7 +140,7 @@ export class PaymentsService {
 
                     await this.balanceService.balanceAction(payment.user_id, BalanceType.balance, resultAmount, BalanceActionType.increase);
                 } catch (error) {
-                    console.log(error);
+                    console.error(error);
                 }
             }
         }
@@ -192,11 +194,11 @@ export class PaymentsService {
 
         if (isLessThanBalance) errorMessage = 'Недостаточно средств на вашем счету';
 
-        const btcAmount = bigAmount.times(Big(this.dollarToBtcRate));
-        const btcComission = Big(paymentConfig.bitaps.comisson.withdraw).times(Big(paymentConfig.oneSatoshi));
-        const isAmountLessThanComission = btcAmount.lt(btcComission);
+        const { withdraw: minWithdrawAmount } = paymentConfig.min;
 
-        if (isAmountLessThanComission) errorMessage = 'Минимальная сумма выплаты 25 QU';
+        const isAmountLessThanComission = bigAmount.lt(Big(minWithdrawAmount));
+
+        if (isAmountLessThanComission) errorMessage = `Минимальная сумма выплаты ${minWithdrawAmount} QU`;
 
         // если сообщений нет, значит всё ок
         const isValid = !errorMessage;
@@ -208,68 +210,59 @@ export class PaymentsService {
         const { isValid, errorMessage } = await this.validateWithdrawAmount(userId, amount);
 
         if (!isValid) throw new HttpException(errorMessage, HttpStatus.BAD_REQUEST);
-        
-        const url = `${domain.BITAPS_API_TESTNET_BASE_URL}/wallet/send/payment/${wallets.testWalletId}`;
 
-        const serviceBtcValue = Big(this.fromQuToSatoshi(amount));
-        const comission = Big(paymentConfig.bitaps.comisson.withdraw);
+        const { commissions } = paymentConfig;
+        const { commission: commissionProcent } = [...commissions].reverse().find(({ from, to }) => {
+            return from <= amount && amount <= to;
+        });
 
-        const amountWithComission = serviceBtcValue.minus(comission).toNumber();
+        const satoshiAmount = Big(this.fromQuToSatoshi(amount));
+        const bigComissionProcent = Big(commissionProcent);
+        const bigCommission = satoshiAmount.times(bigComissionProcent);
 
-        const body = {
-            receivers_list: [
-                {
-                    address,
-                    amount: amountWithComission,
-                },
-            ],
+        const receiveAmount = satoshiAmount.minus(bigCommission).toNumber();
+        const bigAmount = Big(amount);
+
+        const usdAmount = bigAmount.minus(bigAmount.times(bigComissionProcent)).toNumber();
+
+        const newWithdraw: Omit<Withdraw, 'id'> = {
+            user_id: userId,
+            status: PaymentActionStatus.inProgress,
+            amount: usdAmount,
+            date: new Date(),
+            address,
         };
 
-        try {
-            const resp = await this.httpService.post(url, body).toPromise();
-            const { data, status } = resp;
-            
-            const isSuccess = status === 200;
+        await this.balanceService.holdAmountAction(userId, usdAmount, HoldActionType.hold);
+        const { id: withdrawId } = await this.withdrawRepository.save(newWithdraw);
 
-            if (!isSuccess) {
-                throw new HttpException('Что-то пошло не так, попробуйте позже', HttpStatus.BAD_REQUEST);
-            }
+        const receiver: Omit<Receiver, 'id'> = {
+            receiveAmount,
+            amount: usdAmount,
+            user_id: userId,
+            commission: bigCommission.toNumber(),
+            address,
+            withdrawId,
+        };
 
-            // список транзакции
-            const { tx_list } = data;
-            // берем первый из списка
-            const [transactionInfo] = tx_list;
-            // tx_hash хэш транзакции
-            const { tx_hash } = transactionInfo;
+        await this.receiverRepository.save(receiver);
 
-            const newWithdraw: Omit<Withdraw, 'id'> = {
-                user_id: userId,
-                status: PaymentActionStatus.inProgress,
-                amount,
-                date: new Date(),
-                address,
-                tx_hash,
-            };
+        this.sendPayouts();
 
-            await this.balanceService.holdAmountAction(userId, amount, HoldActionType.hold);
-            await this.withdrawRepository.save(newWithdraw);            
-
-            return { success: true };
-        } catch (e) {
-            const errorMessage = errorsObj[e.response?.data?.message] || 'Что-то пошло не так, попробуйте позже';
-            throw new HttpException(errorMessage, HttpStatus.BAD_REQUEST);
-        }
+        return { success: true };
     }
 
     async confirmWithdraw(body) {
         const { event, tx_hash, address, amount } = body;
-
+        
         if (event === 'wallet payment confirmed') {
             const usdAmount = this.fromSatoshiToQu(amount);
 
             const withdraw = await this.withdrawRepository.findOne({
                 where: { tx_hash, address },
             });
+
+            if (!withdraw) return;
             
             const amountWithoutComission = withdraw.amount;
 
@@ -281,7 +274,7 @@ export class PaymentsService {
                 // Увеличиваем выведенное количество денег
                 await this.balanceService.balanceAction(userId, BalanceType.withdrawn, amountWithoutComission, BalanceActionType.increase);
                 // обновляем статус и сумму запроса на вывод средств
-                await this.paymentRepository.update(withdraw.id, { amount: usdAmount, status: PaymentActionStatus.done });
+                await this.withdrawRepository.update(withdraw.id, { amount: usdAmount, status: PaymentActionStatus.done });
                 // уберем с hold выведенное значение
                 await this.balanceService.holdAmountAction(userId, amountWithoutComission, HoldActionType.unhold);
             }
@@ -323,23 +316,54 @@ export class PaymentsService {
 
         return payments;
     }
+    async sendPayouts() {
+        const receivers = await this.receiverRepository.find();
+        const comissionAmount = receivers.reduce((acc, { commission }) => Big(acc).plus(Big(commission)).toNumber(), 0);
+        const { firstUser, additionalUser } = paymentConfig.bitaps.comisson.withdraw;
 
-    startIntervalSending() {
-        setInterval(this.sendPayouts, this.sendingInterval);
-    }
+        const bigFirstUserCommission = Big(firstUser);
+        const bigAdditionalUserCommission = Big(additionalUser);
+        const bigReceiversCount = Big(receivers.length)
+        const bitapsCommission = bigFirstUserCommission.plus(bigAdditionalUserCommission.times(bigReceiversCount)).toNumber();
+        
+        if (comissionAmount < bitapsCommission) return;
 
-    addPayout(userPayout: UserPayout) {
-        this.payoutQueue.push(userPayout);
-    }
-
-    sendPayouts() {
-        if (!this.payoutQueue?.length) return;
-        const walletId = 123;
+        const receivers_list = receivers.map(({ address, receiveAmount }) => ({ address, amount: Number(receiveAmount) }));
         const body = {
-            receivers_list: this.payoutQueue,
-            message: 'message',
+            receivers_list,
+            message: {
+                format: "text",
+                payload: 'message',
+            },
         };
-        this.httpService.post(`https://api.bitaps.com/btc/v1/wallet/send/payment/${walletId}`, body);
+        const url = `${domain.BITAPS_API_TESTNET_BASE_URL}/wallet/send/payment/${wallets.testWalletId}`;
+
+        try {
+            const resp = await this.httpService.post(url, body).toPromise();
+            const { data, status } = resp;
+            
+            const isSuccess = status === 200;
+
+            if (!isSuccess) {
+                throw new HttpException('Что-то пошло не так, попробуйте позже', HttpStatus.BAD_REQUEST);
+            }
+
+            const receiverIds = receivers.map(({ id }) => id);
+
+            await this.receiverRepository.delete(receiverIds);
+
+            // список транзакции
+            const { tx_list } = data;
+
+            tx_list.forEach(async ({ tx_hash, amount }, index) => {
+                const { withdrawId, receiveAmount } = receivers[index];
+
+                await this.withdrawRepository.update(withdrawId, { tx_hash });
+            })
+
+        } catch (e) {
+            console.error(e);
+        }
     }
 
     getDollarRate() {

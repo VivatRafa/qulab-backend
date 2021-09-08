@@ -3,7 +3,7 @@ import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { PaymentActionStatus } from '../enums/paymentStatus.entity';
 
 @Entity()
-export class Withdraw {
+export class Receiver {
     @PrimaryGeneratedColumn()
     id: number;
 
@@ -11,16 +11,16 @@ export class Withdraw {
     user_id: number;
 
     @Column()
-    date: Date;
+    withdrawId: number;
 
-    @Column()
-    status: PaymentActionStatus;
+    @Column({ type: 'numeric', precision: 10, scale: 2 })
+    commission: number;
+
+    @Column({ type: 'numeric', precision: 10, scale: 2 })
+    receiveAmount: number;
 
     @Column({ type: 'numeric', precision: 10, scale: 2 })
     amount: number;
-
-    @Column({ default: null })
-    tx_hash?: string;
 
     @Column()
     address: string;

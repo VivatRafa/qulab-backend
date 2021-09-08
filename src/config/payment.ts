@@ -4,12 +4,32 @@ export const payment = {
         // в сатоши
         comisson: {
             replenish: 7200,
-            withdraw:  60000,
+            withdraw:  {
+                firstUser: 60000,
+                additionalUser: 1000,
+            },
         }
     },
+    commissions: [
+        {
+            from: 10,
+            to: 49,
+            commission: 0.2
+        },
+        {
+            from: 50,
+            to: 99,
+            commission: 0.1
+        },
+        {
+            from: 100,
+            to: Infinity,
+            commission: 0.045
+        }
+    ],
     // в USD
     min: {
-        replenish: 100,
-        withdraw: 25,
+        replenish: 10,
+        withdraw: 10,
     }
 };

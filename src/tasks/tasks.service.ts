@@ -12,6 +12,6 @@ export class TasksService {
     @Cron('0 0 * * *')
     handleCron() {
         this.depositeService.updateDepositeAmount();
-        this.userService.updateAllUsersBonus();
+        // this.userService.updateAllUsersBonus();
     }
 }
